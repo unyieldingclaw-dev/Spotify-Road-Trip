@@ -33,7 +33,7 @@ def get_unique_artist_ids(track_items):
     for item in track_items:
         if not item.get("track"):
             continue
-        for artist in item["track"]["artists"]:
+        for artist in item["track"].get("artists", []):
             if artist["id"] not in seen:
                 seen.add(artist["id"])
                 artist_ids.append(artist["id"])
