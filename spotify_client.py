@@ -70,3 +70,24 @@ def list_all_playlists(sp):
             playlists.append((p["name"], p["id"]))
         results = sp.next(results) if results["next"] else None
     return playlists
+
+
+def expand_by_artists(sp, original_track_items, existing_uris, per_artist=3, country="US"):
+    """
+    For each unique artist in the original tracks, fetch their top tracks and
+    return up to `per_artist` tracks not already in `existing_uris`.
+    """
+    artist_ids = get_unique_artist_ids(original_track_items)
+    additions = []
+    seen_uris = set(existing_uris)
+
+    for artist_id in artist_ids:
+        result = sp.artist_top_tracks(artist_id, country=country)
+        count = 0
+        for track in result["tracks"]:
+            if track["uri"] not in seen_uris and count < per_artist:
+                additions.append(track)
+                seen_uris.add(track["uri"])
+                count += 1
+
+    return additions
