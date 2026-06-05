@@ -98,6 +98,8 @@ def get_recommendations(sp, seed_uris, existing_uris, limit=25):
     Call Spotify's recommendations endpoint with up to 5 seed track URIs.
     Returns tracks not already in `existing_uris`.
     """
+    if not seed_uris:
+        return []
     seeds = seed_uris[:5]
     result = sp.recommendations(seed_tracks=seeds, limit=limit)
     return [t for t in result["tracks"] if t["uri"] not in existing_uris]
