@@ -89,7 +89,9 @@ class App(ctk.CTk):
         self._queue = queue.Queue()
         self._playlists = []   # list of (name, id) tuples
         self._sp = None
+        self._generating = False
 
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
         self._build_ui()
         self._start_auth()
 
@@ -186,7 +188,7 @@ class App(ctk.CTk):
                 "playlists": playlists,
             })
         except Exception as e:
-            self._queue.put({"type": "error", "msg": f"Auth failed: {e}"})
+            self._queue.put({"type": "auth_error", "msg": f"Auth failed: {e}"})
 
     # ── Queue polling ─────────────────────────────────────────────────────────
 
@@ -216,11 +218,16 @@ class App(ctk.CTk):
         elif t == "progress":
             self._progress_bar.set(msg["pct"])
             self._append_log(msg["msg"])
+        elif t == "auth_error":
+            self._status_label.configure(text=f"✗ {msg['msg']}")
+            # Keep Generate disabled — sp is None, generation cannot proceed
         elif t == "done":
+            self._generating = False
             self._progress_bar.set(1.0)
             self._append_log(msg["msg"])
             self._generate_btn.configure(state="normal", text="Generate ▶")
         elif t == "error":
+            self._generating = False
             self._append_log(f"✗ {msg['msg']}")
             self._generate_btn.configure(state="normal", text="Generate ▶")
             self._status_label.configure(text="Error — see log below")
@@ -257,6 +264,7 @@ class App(ctk.CTk):
         self._progress_bar.pack(padx=24, pady=(14, 0))
         self._log.pack(padx=24, pady=(10, 20))
 
+        self._generating = True
         self._generate_btn.configure(state="disabled", text="Generating…")
         self._progress_bar.set(0)
 
@@ -287,6 +295,19 @@ class App(ctk.CTk):
             })
         except Exception as e:
             self._queue.put({"type": "error", "msg": str(e)})
+
+    # ── Close guard ───────────────────────────────────────────────────────────
+
+    def _on_close(self):
+        if self._generating:
+            import tkinter.messagebox as mb
+            if not mb.askyesno(
+                "Generation in progress",
+                "A playlist is still being generated. Close anyway?\n\n"
+                "Closing now may leave a partial playlist in your Spotify account.",
+            ):
+                return
+        self.destroy()
 
 
 def main():
