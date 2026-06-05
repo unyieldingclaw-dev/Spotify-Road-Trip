@@ -77,3 +77,222 @@ def generate_playlist(sp, source_id, source_name, new_name, per_artist, rec_limi
         "recommended": len(rec_additions),
         "total": total,
     }
+
+
+class App(ctk.CTk):
+    def __init__(self):
+        super().__init__()
+        self.title("Road-trip Playlist Generator")
+        self.geometry("440x540")
+        self.resizable(False, False)
+
+        self._queue = queue.Queue()
+        self._playlists = []   # list of (name, id) tuples
+        self._sp = None
+
+        self._build_ui()
+        self._start_auth()
+
+    # ── Layout ────────────────────────────────────────────────────────────────
+
+    def _build_ui(self):
+        # Status line (connection info)
+        self._status_label = ctk.CTkLabel(
+            self, text="Connecting to Spotify…", font=ctk.CTkFont(size=13)
+        )
+        self._status_label.pack(pady=(20, 4))
+
+        # Source playlist
+        ctk.CTkLabel(self, text="Source playlist:", anchor="w").pack(
+            fill="x", padx=24, pady=(16, 2)
+        )
+        self._playlist_var = ctk.StringVar(value="Loading…")
+        self._playlist_menu = ctk.CTkOptionMenu(
+            self,
+            variable=self._playlist_var,
+            values=["Loading…"],
+            command=self._on_playlist_select,
+            state="disabled",
+            width=392,
+        )
+        self._playlist_menu.pack(padx=24)
+
+        # New playlist name
+        ctk.CTkLabel(self, text="New playlist name:", anchor="w").pack(
+            fill="x", padx=24, pady=(14, 2)
+        )
+        self._name_entry = ctk.CTkEntry(self, width=392, state="disabled")
+        self._name_entry.pack(padx=24)
+
+        # Artist tracks slider
+        artist_row = ctk.CTkFrame(self, fg_color="transparent")
+        artist_row.pack(fill="x", padx=24, pady=(14, 0))
+        ctk.CTkLabel(artist_row, text="Artist tracks per artist:").pack(side="left")
+        self._artist_val_label = ctk.CTkLabel(artist_row, text="3", width=24)
+        self._artist_val_label.pack(side="right")
+        self._artist_slider = ctk.CTkSlider(
+            self, from_=1, to=5, number_of_steps=4,
+            command=lambda v: self._artist_val_label.configure(text=str(int(v))),
+            state="disabled", width=392,
+        )
+        self._artist_slider.set(3)
+        self._artist_slider.pack(padx=24)
+
+        # AI recommendations slider
+        rec_row = ctk.CTkFrame(self, fg_color="transparent")
+        rec_row.pack(fill="x", padx=24, pady=(14, 0))
+        ctk.CTkLabel(rec_row, text="AI recommendations:").pack(side="left")
+        self._rec_val_label = ctk.CTkLabel(rec_row, text="25", width=32)
+        self._rec_val_label.pack(side="right")
+        self._rec_slider = ctk.CTkSlider(
+            self, from_=5, to=50, number_of_steps=45,
+            command=lambda v: self._rec_val_label.configure(text=str(int(v))),
+            state="disabled", width=392,
+        )
+        self._rec_slider.set(25)
+        self._rec_slider.pack(padx=24)
+
+        # Generate button
+        self._generate_btn = ctk.CTkButton(
+            self, text="Generate ▶", command=self._on_generate,
+            state="disabled", width=392, height=44,
+            font=ctk.CTkFont(size=15, weight="bold"),
+        )
+        self._generate_btn.pack(padx=24, pady=(20, 0))
+
+        # Progress bar — hidden until Generate is clicked
+        self._progress_bar = ctk.CTkProgressBar(self, width=392)
+        self._progress_bar.set(0)
+
+        # Status log — hidden until Generate is clicked
+        self._log = ctk.CTkTextbox(self, width=392, height=130, state="disabled")
+
+    # ── Auth ──────────────────────────────────────────────────────────────────
+
+    def _start_auth(self):
+        threading.Thread(target=self._auth_worker, daemon=True).start()
+        self.after(100, self._poll_queue)
+
+    def _auth_worker(self):
+        try:
+            self._queue.put({"type": "status", "msg": "Opening Spotify in your browser for login…"})
+            sp = get_spotify_client()
+            user = sp.me()
+            playlists = list_all_playlists(sp)
+            self._sp = sp
+            self._queue.put({
+                "type": "auth_done",
+                "user": user.get("display_name") or user["id"],
+                "playlists": playlists,
+            })
+        except Exception as e:
+            self._queue.put({"type": "error", "msg": f"Auth failed: {e}"})
+
+    # ── Queue polling ─────────────────────────────────────────────────────────
+
+    def _poll_queue(self):
+        while not self._queue.empty():
+            self._handle_message(self._queue.get_nowait())
+        self.after(100, self._poll_queue)
+
+    def _handle_message(self, msg):
+        t = msg["type"]
+        if t == "status":
+            self._status_label.configure(text=msg["msg"])
+        elif t == "auth_done":
+            self._status_label.configure(text=f"Connected as: {msg['user']}")
+            self._playlists = msg["playlists"]
+            names = [name for name, _ in self._playlists]
+            self._playlist_menu.configure(values=names, state="normal")
+            default = next(
+                (n for n in names if n == SOURCE_PLAYLIST_DEFAULT),
+                names[0] if names else "",
+            )
+            self._playlist_var.set(default)
+            self._on_playlist_select(default)
+            for widget in (self._name_entry, self._artist_slider,
+                           self._rec_slider, self._generate_btn):
+                widget.configure(state="normal")
+        elif t == "progress":
+            self._progress_bar.set(msg["pct"])
+            self._append_log(msg["msg"])
+        elif t == "done":
+            self._progress_bar.set(1.0)
+            self._append_log(msg["msg"])
+            self._generate_btn.configure(state="normal", text="Generate ▶")
+        elif t == "error":
+            self._append_log(f"✗ {msg['msg']}")
+            self._generate_btn.configure(state="normal", text="Generate ▶")
+            self._status_label.configure(text="Error — see log below")
+
+    # ── UI helpers ────────────────────────────────────────────────────────────
+
+    def _on_playlist_select(self, selected_name):
+        self._name_entry.configure(state="normal")
+        self._name_entry.delete(0, "end")
+        self._name_entry.insert(0, f"{selected_name} Extended")
+
+    def _append_log(self, msg):
+        self._log.configure(state="normal")
+        self._log.insert("end", msg + "\n")
+        self._log.see("end")
+        self._log.configure(state="disabled")
+
+    # ── Generate ──────────────────────────────────────────────────────────────
+
+    def _on_generate(self):
+        selected_name = self._playlist_var.get()
+        playlist_id = next(
+            (pid for name, pid in self._playlists if name == selected_name), None
+        )
+        if not playlist_id:
+            return
+
+        new_name = self._name_entry.get().strip() or f"{selected_name} Extended"
+        per_artist = int(self._artist_slider.get())
+        rec_limit = int(self._rec_slider.get())
+
+        # Expand window and reveal progress widgets
+        self.geometry("440x740")
+        self._progress_bar.pack(padx=24, pady=(14, 0))
+        self._log.pack(padx=24, pady=(10, 20))
+
+        self._generate_btn.configure(state="disabled", text="Generating…")
+        self._progress_bar.set(0)
+
+        threading.Thread(
+            target=self._generate_worker,
+            args=(playlist_id, selected_name, new_name, per_artist, rec_limit),
+            daemon=True,
+        ).start()
+
+    def _generate_worker(self, source_id, source_name, new_name, per_artist, rec_limit):
+        def on_progress(pct, msg):
+            self._queue.put({"type": "progress", "pct": pct, "msg": msg})
+
+        try:
+            on_progress(0.05, "⟳ Starting generation…")
+            result = generate_playlist(
+                self._sp, source_id, source_name, new_name,
+                per_artist, rec_limit, on_progress,
+            )
+            self._queue.put({
+                "type": "done",
+                "msg": (
+                    f"🎉 {result['total']} total  ·  "
+                    f"{result['original']} original  ·  "
+                    f"{result['artist']} artist  ·  "
+                    f"{result['recommended']} AI"
+                ),
+            })
+        except Exception as e:
+            self._queue.put({"type": "error", "msg": str(e)})
+
+
+def main():
+    app = App()
+    app.mainloop()
+
+
+if __name__ == "__main__":
+    main()
