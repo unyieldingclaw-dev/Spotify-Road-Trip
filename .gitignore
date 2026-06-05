@@ -5,3 +5,6 @@ __pycache__/
 .pytest_cache/
 venv/
 .venv/
+
+# Memory Bank
+handoff.md
