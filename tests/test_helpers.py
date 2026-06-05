@@ -1,5 +1,5 @@
 from unittest.mock import MagicMock
-from spotify_client import get_track_uris, get_unique_artist_ids, expand_by_artists
+from spotify_client import get_track_uris, get_unique_artist_ids, expand_by_artists, get_recommendations
 
 
 def _make_track_item(uri, artist_ids):
@@ -88,3 +88,33 @@ def test_expand_by_artists_multiple_artists_respected_independently():
     result = expand_by_artists(mock_sp, original_items, existing_uris, per_artist=2)
 
     assert [t["uri"] for t in result] == ["uri-a1-1", "uri-a1-2", "uri-a2-1", "uri-a2-2"]
+
+
+def test_get_recommendations_filters_existing_and_respects_limit():
+    mock_sp = MagicMock()
+    mock_sp.recommendations.return_value = {
+        "tracks": [
+            {"uri": "uri-existing"},   # already in playlist, skip
+            {"uri": "uri-rec-1"},
+            {"uri": "uri-rec-2"},
+        ]
+    }
+
+    existing_uris = {"uri-existing"}
+    seed_uris = ["uri-seed-1", "uri-seed-2"]
+
+    result = get_recommendations(mock_sp, seed_uris, existing_uris, limit=25)
+
+    assert [t["uri"] for t in result] == ["uri-rec-1", "uri-rec-2"]
+    mock_sp.recommendations.assert_called_once_with(seed_tracks=["uri-seed-1", "uri-seed-2"], limit=25)
+
+
+def test_get_recommendations_uses_at_most_5_seeds():
+    mock_sp = MagicMock()
+    mock_sp.recommendations.return_value = {"tracks": []}
+
+    seeds = ["s1", "s2", "s3", "s4", "s5", "s6", "s7"]  # 7 seeds, must truncate to 5
+    get_recommendations(mock_sp, seeds, set(), limit=10)
+
+    call_args = mock_sp.recommendations.call_args
+    assert len(call_args.kwargs["seed_tracks"]) == 5

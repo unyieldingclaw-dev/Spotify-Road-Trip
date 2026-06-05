@@ -91,3 +91,13 @@ def expand_by_artists(sp, original_track_items, existing_uris, per_artist=3, cou
                 count += 1
 
     return additions
+
+
+def get_recommendations(sp, seed_uris, existing_uris, limit=25):
+    """
+    Call Spotify's recommendations endpoint with up to 5 seed track URIs.
+    Returns tracks not already in `existing_uris`.
+    """
+    seeds = seed_uris[:5]
+    result = sp.recommendations(seed_tracks=seeds, limit=limit)
+    return [t for t in result["tracks"] if t["uri"] not in existing_uris]
