@@ -61,3 +61,30 @@ def test_expand_by_artists_limits_per_artist_and_deduplicates():
     result = expand_by_artists(mock_sp, original_items, existing_uris, per_artist=2)
 
     assert [t["uri"] for t in result] == ["uri-new-1", "uri-new-2"]
+
+
+def test_expand_by_artists_multiple_artists_respected_independently():
+    # Two artists; per_artist=2 limit applies to each independently
+    mock_sp = MagicMock()
+    mock_sp.artist_top_tracks.side_effect = [
+        {"tracks": [
+            {"uri": "uri-a1-1", "artists": [{"id": "a1"}]},
+            {"uri": "uri-a1-2", "artists": [{"id": "a1"}]},
+            {"uri": "uri-a1-3", "artists": [{"id": "a1"}]},  # over limit
+        ]},
+        {"tracks": [
+            {"uri": "uri-a2-1", "artists": [{"id": "a2"}]},
+            {"uri": "uri-a2-2", "artists": [{"id": "a2"}]},
+            {"uri": "uri-a2-3", "artists": [{"id": "a2"}]},  # over limit
+        ]},
+    ]
+
+    original_items = [
+        _make_track_item("uri-orig-1", ["a1"]),
+        _make_track_item("uri-orig-2", ["a2"]),
+    ]
+    existing_uris = get_track_uris(original_items)
+
+    result = expand_by_artists(mock_sp, original_items, existing_uris, per_artist=2)
+
+    assert [t["uri"] for t in result] == ["uri-a1-1", "uri-a1-2", "uri-a2-1", "uri-a2-2"]
