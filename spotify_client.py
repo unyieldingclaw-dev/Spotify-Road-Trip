@@ -103,3 +103,15 @@ def get_recommendations(sp, seed_uris, existing_uris, limit=25):
     seeds = seed_uris[:5]
     result = sp.recommendations(seed_tracks=seeds, limit=limit)
     return [t for t in result["tracks"] if t["uri"] not in existing_uris]
+
+
+def create_playlist(sp, user_id, name):
+    """Create a new private playlist. Returns playlist ID."""
+    playlist = sp.user_playlist_create(user_id, name, public=False)
+    return playlist["id"]
+
+
+def add_tracks_in_batches(sp, playlist_id, uris):
+    """Add track URIs to a playlist in batches of 100 (Spotify API limit)."""
+    for i in range(0, len(uris), 100):
+        sp.playlist_add_items(playlist_id, uris[i:i + 100])
