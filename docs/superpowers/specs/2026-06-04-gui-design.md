@@ -11,7 +11,7 @@ A customtkinter desktop GUI (`app.py`) that wraps the existing `spotify_client.p
 
 ## Layout
 
-Single window (~420×540px, dark theme):
+Single window (~440×540px, dark theme):
 
 ```
 ┌──────────────────────────────────┐
@@ -71,11 +71,13 @@ Single window (~420×540px, dark theme):
 
 ### 4. Done
 - Progress bar fills to 100%
-- Summary line: `Done! 89 total tracks in '[new name]'`
+- Two summary lines appear in the log:
+  - `🎉 Done! 89 total tracks in '[new name]'` (from `generate_playlist` progress callback at 100%)
+  - `🎉 89 total  ·  47 original  ·  23 artist  ·  19 AI` (from the done message in `_generate_worker`)
 - Generate button re-enabled (user can run again with different settings)
 
 ### 5. Error
-- If any step fails, status log shows `✗ [error message]` in red
+- If any step fails, status log shows `✗ [error message]` (red text color is planned but not yet implemented — `CTkTextbox` does not support per-tag coloring in the current implementation)
 - Generate button re-enabled so user can retry
 
 ## Architecture
@@ -122,12 +124,11 @@ All other dependencies (`spotipy`, `python-dotenv`) already present.
 | Step | Progress |
 |------|----------|
 | Auth complete | 5% |
-| Playlists loaded | 15% |
-| Source tracks read | 30% |
-| New playlist created | 40% |
-| Original tracks copied | 55% |
-| Artist tracks added | 75% |
-| AI recommendations added | 95% |
+| Source tracks read | 30–40% |
+| New playlist created | 45% |
+| Original tracks copied | 50–60% |
+| Artist tracks added | 65–80% |
+| AI recommendations added | 85–95% |
 | Done | 100% |
 
 ## Verification
